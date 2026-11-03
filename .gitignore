@@ -1,0 +1,5 @@
+backend/config.json
+backend/build/
+backend/*.exe
+backend/uploads/
+.vscode/

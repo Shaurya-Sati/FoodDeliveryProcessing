@@ -1,0 +1,25 @@
+{
+  "listeners": [
+    {
+      "address": "127.0.0.1",
+      "port": 8080,
+      "https": false
+    }
+  ],
+  "db_clients": [
+    {
+      "name": "food_db",
+      "rdbms": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "dbname": "food_delivery",
+      "user": "food_app",
+      "passwd": "SET_THIS_LOCALLY",
+      "is_fast": false,
+      "connection_number": 4,
+      "timeout": 5,
+      "auto_batch": false,
+      "rollback_on_disconnect": false
+    }
+  ]
+}
