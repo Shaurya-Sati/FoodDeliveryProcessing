@@ -66,46 +66,114 @@ void failOrder(const std::shared_ptr<OrderCreation>& order,
     (*order->callback)(jsonError(message, status));
 }
 
+void insertNextOrderItem(const std::shared_ptr<OrderCreation>& order);
+
+void saveOrderTotal(const std::shared_ptr<OrderCreation>& order) {
+    const double total = static_cast<double>(order->totalCents) / 100.0;
+    order->transaction->execSqlAsync(
+        "UPDATE orders SET total_amount = ? WHERE id = ?",
+        [order, total](const drogon::orm::Result&) {
+            order->transaction->setCommitCallback(
+                [order, total](bool success) {
+                    if (!success) {
+                        (*order->callback)(jsonError(
+                            "Unable to commit order",
+                            drogon::k500InternalServerError));
+                        return;
+                    }
+
+                    try {
+                        getOrderProcessor()->submitOrder(order->orderId);
+                    } catch (const std::exception& e) {
+                        LOG_ERROR << "Could not queue order "
+                                  << order->orderId << ": " << e.what();
+                    }
+
+                    Json::Value body;
+                    body["message"] = "Order placed successfully";
+                    body["order_id"] = order->orderId;
+                    body["total_amount"] = total;
+                    body["items"] = order->savedItems;
+                    (*order->callback)(
+                        drogon::HttpResponse::newHttpJsonResponse(body));
+                });
+
+            auto transaction = std::move(order->transaction);
+            transaction.reset();
+        },
+        [order](const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Order total update failed: " << e.base().what();
+            failOrder(order, "Unable to save order",
+                      drogon::k500InternalServerError);
+        },
+        total, order->orderId);
+}
+
+void saveOrderItem(const std::shared_ptr<OrderCreation>& order,
+                   const OrderItemInput& item,
+                   const drogon::orm::Result& rows) {
+    if (rows.empty()) {
+        failOrder(order, "Food item not found", drogon::k400BadRequest);
+        return;
+    }
+
+    const auto& row = rows[0];
+    if (row["availability"].as<int>() == 0) {
+        failOrder(order, "Food item is unavailable", drogon::k400BadRequest);
+        return;
+    }
+
+    const double price = row["price"].as<double>();
+    if (!std::isfinite(price) || price <= 0 || price > 1000000.0) {
+        failOrder(order, "Food item has an invalid price",
+                  drogon::k400BadRequest);
+        return;
+    }
+    const std::int64_t priceCents =
+        static_cast<std::int64_t>(std::llround(price * 100.0));
+    constexpr std::int64_t maxOrderCents = 9999999999LL;
+    if (priceCents <= 0 || priceCents > 100000000LL) {
+        failOrder(order, "Food item has an invalid price",
+                  drogon::k400BadRequest);
+        return;
+    }
+
+    const std::int64_t lineTotalCents =
+        priceCents * static_cast<std::int64_t>(item.quantity);
+    if (lineTotalCents > maxOrderCents - order->totalCents) {
+        failOrder(order, "Order total exceeds the supported limit",
+                  drogon::k400BadRequest);
+        return;
+    }
+
+    const std::string name = row["name"].as<std::string>();
+    const double trustedPrice = static_cast<double>(priceCents) / 100.0;
+    order->transaction->execSqlAsync(
+        "INSERT INTO order_items "
+        "(order_id, food_id, quantity, price) VALUES (?, ?, ?, ?)",
+        [order, item, name, priceCents, lineTotalCents](
+            const drogon::orm::Result&) {
+            order->totalCents += lineTotalCents;
+            Json::Value saved;
+            saved["food_id"] = item.foodId;
+            saved["name"] = name;
+            saved["quantity"] = item.quantity;
+            saved["price"] = static_cast<double>(priceCents) / 100.0;
+            order->savedItems.append(saved);
+            ++order->nextItem;
+            insertNextOrderItem(order);
+        },
+        [order](const drogon::orm::DrogonDbException& e) {
+            LOG_ERROR << "Order item insert failed: " << e.base().what();
+            failOrder(order, "Unable to save order",
+                      drogon::k500InternalServerError);
+        },
+        order->orderId, item.foodId, item.quantity, trustedPrice);
+}
+
 void insertNextOrderItem(const std::shared_ptr<OrderCreation>& order) {
     if (order->nextItem == order->items.size()) {
-        const double total = static_cast<double>(order->totalCents) / 100.0;
-        order->transaction->execSqlAsync(
-            "UPDATE orders SET total_amount = ? WHERE id = ?",
-            [order, total](const drogon::orm::Result&) {
-                order->transaction->setCommitCallback(
-                    [order, total](bool success) {
-                        if (!success) {
-                            (*order->callback)(jsonError(
-                                "Unable to commit order",
-                                drogon::k500InternalServerError));
-                            return;
-                        }
-
-                        try {
-                            getOrderProcessor()->submitOrder(order->orderId);
-                        } catch (const std::exception& e) {
-                            LOG_ERROR << "Could not queue order "
-                                      << order->orderId << ": " << e.what();
-                        }
-
-                        Json::Value body;
-                        body["message"] = "Order placed successfully";
-                        body["order_id"] = order->orderId;
-                        body["total_amount"] = total;
-                        body["items"] = order->savedItems;
-                        (*order->callback)(
-                            drogon::HttpResponse::newHttpJsonResponse(body));
-                    });
-
-                auto transaction = std::move(order->transaction);
-                transaction.reset();
-            },
-            [order](const drogon::orm::DrogonDbException& e) {
-                LOG_ERROR << "Order total update failed: " << e.base().what();
-                failOrder(order, "Unable to save order",
-                          drogon::k500InternalServerError);
-            },
-            total, order->orderId);
+        saveOrderTotal(order);
         return;
     }
 
@@ -114,68 +182,7 @@ void insertNextOrderItem(const std::shared_ptr<OrderCreation>& order) {
         "SELECT id, name, price, availability "
         "FROM food_items WHERE id = ?",
         [order, item](const drogon::orm::Result& rows) {
-            if (rows.empty()) {
-                failOrder(order, "Food item not found",
-                          drogon::k400BadRequest);
-                return;
-            }
-
-            const auto& row = rows[0];
-            if (row["availability"].as<int>() == 0) {
-                failOrder(order, "Food item is unavailable",
-                          drogon::k400BadRequest);
-                return;
-            }
-
-            const double price = row["price"].as<double>();
-            if (!std::isfinite(price) || price <= 0 || price > 1000000.0) {
-                failOrder(order, "Food item has an invalid price",
-                          drogon::k400BadRequest);
-                return;
-            }
-            const std::int64_t priceCents =
-                static_cast<std::int64_t>(std::llround(price * 100.0));
-            constexpr std::int64_t maxOrderCents = 9999999999LL;
-            if (priceCents <= 0 || priceCents > 100000000LL) {
-                failOrder(order, "Food item has an invalid price",
-                          drogon::k400BadRequest);
-                return;
-            }
-
-            const std::int64_t lineTotalCents =
-                priceCents * static_cast<std::int64_t>(item.quantity);
-            if (lineTotalCents > maxOrderCents - order->totalCents) {
-                failOrder(order, "Order total exceeds the supported limit",
-                          drogon::k400BadRequest);
-                return;
-            }
-
-            const std::string name = row["name"].as<std::string>();
-            const double trustedPrice =
-                static_cast<double>(priceCents) / 100.0;
-            order->transaction->execSqlAsync(
-                "INSERT INTO order_items "
-                "(order_id, food_id, quantity, price) VALUES (?, ?, ?, ?)",
-                [order, item, name, priceCents, lineTotalCents](
-                    const drogon::orm::Result&) {
-                    order->totalCents += lineTotalCents;
-                    Json::Value saved;
-                    saved["food_id"] = item.foodId;
-                    saved["name"] = name;
-                    saved["quantity"] = item.quantity;
-                    saved["price"] =
-                        static_cast<double>(priceCents) / 100.0;
-                    order->savedItems.append(saved);
-                    ++order->nextItem;
-                    insertNextOrderItem(order);
-                },
-                [order](const drogon::orm::DrogonDbException& e) {
-                    LOG_ERROR << "Order item insert failed: "
-                              << e.base().what();
-                    failOrder(order, "Unable to save order",
-                              drogon::k500InternalServerError);
-                },
-                order->orderId, item.foodId, item.quantity, trustedPrice);
+            saveOrderItem(order, item, rows);
         },
         [order](const drogon::orm::DrogonDbException& e) {
             LOG_ERROR << "Food lookup for order failed: " << e.base().what();
@@ -183,6 +190,69 @@ void insertNextOrderItem(const std::shared_ptr<OrderCreation>& order) {
                       drogon::k500InternalServerError);
         },
         item.foodId);
+}
+
+bool parseOrderItems(const Json::Value& requestBody,
+                     std::vector<OrderItemInput>& orderItems,
+                     std::string& errorMessage) {
+    if (!requestBody.isMember("items") ||
+        !requestBody["items"].isArray() ||
+        requestBody["items"].empty()) {
+        errorMessage = "Please provide a non-empty items array";
+        return false;
+    }
+
+    const Json::Value& items = requestBody["items"];
+    orderItems.reserve(items.size());
+    for (const auto& item : items) {
+        if (!item.isMember("food_id") ||
+            !item.isMember("quantity") ||
+            !item["food_id"].isInt() ||
+            !item["quantity"].isInt() ||
+            item["food_id"].asInt() <= 0 ||
+            item["quantity"].asInt() <= 0) {
+            errorMessage = "Each item needs a positive food_id and quantity";
+            return false;
+        }
+
+        orderItems.push_back(
+            {item["food_id"].asInt(), item["quantity"].asInt()});
+    }
+    return true;
+}
+
+void startOrderTransaction(
+    const drogon::orm::DbClientPtr& db,
+    const std::shared_ptr<OrderCreation>& order) {
+    db->newTransactionAsync(
+        [order](const std::shared_ptr<drogon::orm::Transaction>& transaction) {
+            if (!transaction) {
+                failOrder(order, "Unable to start order transaction",
+                          drogon::k500InternalServerError);
+                return;
+            }
+
+            order->transaction = transaction;
+            transaction->execSqlAsync(
+                "INSERT INTO orders (total_amount, status) "
+                "VALUES (0, 'PLACED')",
+                [order](const drogon::orm::Result& result) {
+                    const auto id = result.insertId();
+                    if (id <= 0 || id > std::numeric_limits<int>::max()) {
+                        failOrder(order, "Unable to create order",
+                                  drogon::k500InternalServerError);
+                        return;
+                    }
+
+                    order->orderId = static_cast<int>(id);
+                    insertNextOrderItem(order);
+                },
+                [order](const drogon::orm::DrogonDbException& e) {
+                    LOG_ERROR << "Order insert failed: " << e.base().what();
+                    failOrder(order, "Unable to save order",
+                              drogon::k500InternalServerError);
+                });
+        });
 }
 }  // namespace
 
@@ -270,30 +340,17 @@ int main() {
         [](const drogon::HttpRequestPtr& request,
            std::function<void(const drogon::HttpResponsePtr&)>&& callback) {
             auto json = request->getJsonObject();
-            if (!json || !json->isMember("items") ||
-                !(*json)["items"].isArray() || (*json)["items"].empty()) {
+            if (!json) {
                 callback(jsonError("Please provide a non-empty items array",
                                    drogon::k400BadRequest));
                 return;
             }
 
-            const Json::Value items = (*json)["items"];
             std::vector<OrderItemInput> orderItems;
-            orderItems.reserve(items.size());
-            for (const auto& item : items) {
-                if (!item.isMember("food_id") ||
-                    !item.isMember("quantity") ||
-                    !item["food_id"].isInt() ||
-                    !item["quantity"].isInt() ||
-                    item["food_id"].asInt() <= 0 ||
-                    item["quantity"].asInt() <= 0) {
-                    callback(jsonError(
-                        "Each item needs a positive food_id and quantity",
-                        drogon::k400BadRequest));
-                    return;
-                }
-                orderItems.push_back(
-                    {item["food_id"].asInt(), item["quantity"].asInt()});
+            std::string validationError;
+            if (!parseOrderItems(*json, orderItems, validationError)) {
+                callback(jsonError(validationError, drogon::k400BadRequest));
+                return;
             }
 
             auto db = drogon::app().getDbClient("food_db");
@@ -309,36 +366,7 @@ int main() {
                     const drogon::HttpResponsePtr&)>>(std::move(callback));
             order->items = std::move(orderItems);
 
-            db->newTransactionAsync(
-                [order](const std::shared_ptr<drogon::orm::Transaction>& txn) {
-                    if (!txn) {
-                        failOrder(order, "Unable to start order transaction",
-                                  drogon::k500InternalServerError);
-                        return;
-                    }
-
-                    order->transaction = txn;
-                    txn->execSqlAsync(
-                        "INSERT INTO orders (total_amount, status) "
-                        "VALUES (0, 'PLACED')",
-                        [order](const drogon::orm::Result& result) {
-                            const auto id = result.insertId();
-                            if (id <= 0 ||
-                                id > std::numeric_limits<int>::max()) {
-                                failOrder(order, "Unable to create order",
-                                          drogon::k500InternalServerError);
-                                return;
-                            }
-                            order->orderId = static_cast<int>(id);
-                            insertNextOrderItem(order);
-                        },
-                        [order](const drogon::orm::DrogonDbException& e) {
-                            LOG_ERROR << "Order insert failed: "
-                                      << e.base().what();
-                            failOrder(order, "Unable to save order",
-                                      drogon::k500InternalServerError);
-                        });
-                });
+            startOrderTransaction(db, order);
         },
         {drogon::Post});
 

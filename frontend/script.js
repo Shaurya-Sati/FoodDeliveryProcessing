@@ -407,70 +407,170 @@ function resetAdminFoodForm() {
     cancelFoodEditButton.hidden = true;
 }
 
+function renderAdminFoods() {
+    if (!adminFoods.length) {
+        adminFoodTableBody.innerHTML =
+            '<tr><td colspan="7" class="empty-cell">No menu items found.</td></tr>';
+        return;
+    }
+
+    adminFoodTableBody.innerHTML = adminFoods.map(food => {
+        const id = Number(food.id);
+        const availabilityClass = food.availability
+            ? "status-ready"
+            : "status-placed";
+        const availabilityText = food.availability ? "Available" : "Hidden";
+        const toggleText = food.availability ? "Hide" : "Show";
+        const availableValue = food.availability ? 1 : 0;
+
+        return `
+            <tr>
+                <td>${id}</td>
+                <td><strong>${escapeHtml(food.name)}</strong></td>
+                <td>${escapeHtml(food.category)}</td>
+                <td>₹${money(food.price)}</td>
+                <td>★ ${money(food.rating)}</td>
+                <td>
+                    <span class="status-pill ${availabilityClass}">${availabilityText}</span>
+                </td>
+                <td>
+                    <div class="admin-action">
+                        <button class="small-btn edit-food-btn"
+                                data-id="${id}" type="button">Edit</button>
+                        <button class="small-btn toggle-food-btn"
+                                data-id="${id}"
+                                data-available="${availableValue}"
+                                type="button">${toggleText}</button>
+                    </div>
+                </td>
+            </tr>`;
+    }).join("");
+}
+
 async function loadAdminFoods() {
-    adminFoodTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">Loading menu…</td></tr>';
+    adminFoodTableBody.innerHTML =
+        '<tr><td colspan="7" class="empty-cell">Loading menu…</td></tr>';
     try {
         const response = await fetch(ADMIN_FOODS_URL);
         adminFoods = await readJsonResponse(response);
-        if (!adminFoods.length) {
-            adminFoodTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">No menu items found.</td></tr>';
-            return;
-        }
-        adminFoodTableBody.innerHTML = adminFoods.map(food => `
-            <tr>
-                <td>${Number(food.id)}</td><td><strong>${escapeHtml(food.name)}</strong></td>
-                <td>${escapeHtml(food.category)}</td><td>₹${money(food.price)}</td><td>★ ${money(food.rating)}</td>
-                <td><span class="status-pill ${food.availability ? 'status-ready' : 'status-placed'}">${food.availability ? 'Available' : 'Hidden'}</span></td>
-                <td><div class="admin-action"><button class="small-btn edit-food-btn" data-id="${Number(food.id)}" type="button">Edit</button><button class="small-btn toggle-food-btn" data-id="${Number(food.id)}" data-available="${food.availability ? 1 : 0}" type="button">${food.availability ? 'Hide' : 'Show'}</button></div></td>
-            </tr>`).join('');
+        renderAdminFoods();
     } catch (error) {
-        adminFoodTableBody.innerHTML = '<tr><td colspan="7" class="empty-cell">Could not load admin menu.</td></tr>';
-        setAdminMessage(`${error.message}. Check backend and run the SQL migration.`, true);
+        adminFoodTableBody.innerHTML =
+            '<tr><td colspan="7" class="empty-cell">Could not load admin menu.</td></tr>';
+        setAdminMessage(
+            `${error.message}. Check backend and run the SQL migration.`,
+            true
+        );
     }
 }
 
-adminFoodForm.addEventListener('submit', async event => {
+function getAdminFoodFormValues() {
+    return {
+        name: adminFoodName.value.trim(),
+        category: adminFoodCategory.value.trim(),
+        price: Number(adminFoodPrice.value),
+        rating: Number(adminFoodRating.value)
+    };
+}
+
+function isValidAdminFood(food) {
+    return food.name &&
+        food.category &&
+        Number.isFinite(food.price) &&
+        food.price > 0 &&
+        food.price <= 1000000 &&
+        Number.isFinite(food.rating) &&
+        food.rating >= 0 &&
+        food.rating <= 5;
+}
+
+async function saveAdminFood(event) {
     event.preventDefault();
     const id = adminFoodId.value.trim();
-    const payload = { name: adminFoodName.value.trim(), category: adminFoodCategory.value.trim(), price: Number(adminFoodPrice.value), rating: Number(adminFoodRating.value) };
-    if (!payload.name || !payload.category || !Number.isFinite(payload.price) || payload.price <= 0 || payload.price > 1000000 || !Number.isFinite(payload.rating) || payload.rating < 0 || payload.rating > 5) {
-        setAdminMessage('Enter a name, category, positive price up to ₹10,00,000, and rating from 0 to 5.', true); return;
+    const food = getAdminFoodFormValues();
+    if (!isValidAdminFood(food)) {
+        setAdminMessage(
+            'Enter a name, category, positive price up to ₹10,00,000, and rating from 0 to 5.',
+            true
+        );
+        return;
     }
+
     saveFoodButton.disabled = true;
     try {
-        const response = await fetch(ADMIN_FOODS_URL, { method: id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(id ? { id: Number(id), ...payload } : payload) });
+        const response = await fetch(ADMIN_FOODS_URL, {
+            method: id ? "PUT" : "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(id ? { id: Number(id), ...food } : food)
+        });
         const result = await readJsonResponse(response);
-        setAdminMessage(result.message || (id ? 'Menu item updated.' : 'Menu item added.'));
+        setAdminMessage(
+            result.message || (id ? "Menu item updated." : "Menu item added.")
+        );
         resetAdminFoodForm();
         await Promise.all([loadAdminFoods(), loadFoods()]);
-    } catch (error) { setAdminMessage(error.message, true); }
-    finally { saveFoodButton.disabled = false; }
-});
+    } catch (error) {
+        setAdminMessage(error.message, true);
+    } finally {
+        saveFoodButton.disabled = false;
+    }
+}
 
-adminFoodTableBody.addEventListener('click', async event => {
-    const editButton = event.target.closest('.edit-food-btn');
-    const toggleButton = event.target.closest('.toggle-food-btn');
+function editAdminFood(button) {
+    const food = adminFoods.find(
+        item => Number(item.id) === Number(button.dataset.id)
+    );
+    if (!food) return;
+
+    adminFoodId.value = food.id;
+    adminFoodName.value = food.name;
+    adminFoodCategory.value = food.category;
+    adminFoodPrice.value = food.price;
+    adminFoodRating.value = food.rating;
+    saveFoodButton.textContent = "Save changes";
+    cancelFoodEditButton.hidden = false;
+    adminFoodForm.scrollIntoView({ behavior: "smooth", block: "center" });
+}
+
+async function toggleAdminFoodAvailability(button) {
+    const id = Number(button.dataset.id);
+    const availability = button.dataset.available !== "1";
+    button.disabled = true;
+
+    try {
+        const response = await fetch(ADMIN_AVAILABILITY_URL, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, availability })
+        });
+        const result = await readJsonResponse(response);
+        setAdminMessage(result.message || "Availability updated.");
+        await Promise.all([loadAdminFoods(), loadFoods()]);
+    } catch (error) {
+        setAdminMessage(error.message, true);
+    } finally {
+        button.disabled = false;
+    }
+}
+
+adminFoodForm.addEventListener("submit", saveAdminFood);
+
+adminFoodTableBody.addEventListener("click", async event => {
+    const editButton = event.target.closest(".edit-food-btn");
+    const toggleButton = event.target.closest(".toggle-food-btn");
+
     if (editButton) {
-        const food = adminFoods.find(item => Number(item.id) === Number(editButton.dataset.id));
-        if (!food) return;
-        adminFoodId.value = food.id; adminFoodName.value = food.name; adminFoodCategory.value = food.category;
-        adminFoodPrice.value = food.price; adminFoodRating.value = food.rating;
-        saveFoodButton.textContent = 'Save changes'; cancelFoodEditButton.hidden = false;
-        adminFoodForm.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        editAdminFood(editButton);
     }
+
     if (toggleButton) {
-        const id = Number(toggleButton.dataset.id);
-        const availability = toggleButton.dataset.available !== '1';
-        toggleButton.disabled = true;
-        try {
-            const response = await fetch(ADMIN_AVAILABILITY_URL, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id, availability }) });
-            const result = await readJsonResponse(response); setAdminMessage(result.message || 'Availability updated.');
-            await Promise.all([loadAdminFoods(), loadFoods()]);
-        } catch (error) { setAdminMessage(error.message, true); }
-        finally { toggleButton.disabled = false; }
+        await toggleAdminFoodAvailability(toggleButton);
     }
 });
 
-cancelFoodEditButton.addEventListener('click', resetAdminFoodForm);
-document.getElementById('refresh-admin-menu-btn').addEventListener('click', loadAdminFoods);
+cancelFoodEditButton.addEventListener("click", resetAdminFoodForm);
+document.getElementById("refresh-admin-menu-btn").addEventListener(
+    "click",
+    loadAdminFoods
+);
 loadAdminFoods();

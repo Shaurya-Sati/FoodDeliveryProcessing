@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <functional>
 #include <limits>
 #include <string>
 
@@ -34,6 +35,18 @@ bool getNumber(const Json::Value &body, const char *key, double &out) {
     return std::isfinite(out);
 }
 
+bool getPositiveId(const Json::Value &body, int &id) {
+    double idValue;
+    if (!getNumber(body, "id", idValue) || idValue < 1 ||
+        idValue > std::numeric_limits<int>::max() ||
+        std::floor(idValue) != idValue) {
+        return false;
+    }
+
+    id = static_cast<int>(idValue);
+    return true;
+}
+
 Json::Value toJson(const drogon::orm::Result &rows) {
     Json::Value foods(Json::arrayValue);
     for (const auto &row : rows) {
@@ -48,153 +61,234 @@ Json::Value toJson(const drogon::orm::Result &rows) {
     }
     return foods;
 }
+
+Json::Value foodUpdatedResponse(int id) {
+    Json::Value response;
+    response["message"] = "Food item updated";
+    response["id"] = id;
+    return response;
+}
+
+Json::Value availabilityResponse(int id, int availability) {
+    Json::Value response;
+    response["message"] = availability
+        ? "Food item is now available"
+        : "Food item hidden from customers";
+    response["id"] = id;
+    response["availability"] = availability != 0;
+    return response;
+}
 }
 
 void registerAdminRoutes() {
     auto &app = drogon::app();
-    app.registerHandler("/api/admin/foods",
-        [](const drogon::HttpRequestPtr &, Callback &&cb) {
+    app.registerHandler(
+        "/api/admin/foods",
+        [](const drogon::HttpRequestPtr &, Callback &&callback) {
             auto db = drogon::app().getDbClient("food_db");
             if (!db) {
-                cb(errorResponse("Database client unavailable",
-                                 drogon::k500InternalServerError));
+                callback(errorResponse("Database client unavailable",
+                                       drogon::k500InternalServerError));
                 return;
             }
-            db->execSqlAsync("SELECT id,name,category,price,rating,availability FROM food_items ORDER BY id",
-                [cb](const drogon::orm::Result &rows) mutable {
-                    cb(drogon::HttpResponse::newHttpJsonResponse(toJson(rows)));
+            db->execSqlAsync(
+                "SELECT id,name,category,price,rating,availability FROM food_items ORDER BY id",
+                [callback](const drogon::orm::Result &rows) mutable {
+                    callback(drogon::HttpResponse::newHttpJsonResponse(
+                        toJson(rows)));
                 },
-                [cb](const drogon::orm::DrogonDbException &e) mutable {
-                    LOG_ERROR << "Admin menu read failed: " << e.base().what();
-                    cb(errorResponse("Unable to load admin menu", drogon::k500InternalServerError));
+                [callback](const drogon::orm::DrogonDbException &e) mutable {
+                    LOG_ERROR << "Admin menu read failed: "
+                              << e.base().what();
+                    callback(errorResponse(
+                        "Unable to load admin menu",
+                        drogon::k500InternalServerError));
                 });
-        }, {drogon::Get});
+        },
+        {drogon::Get});
 
-    app.registerHandler("/api/admin/foods",
-        [](const drogon::HttpRequestPtr &req, Callback &&cb) {
-            auto body = req->getJsonObject();
-            std::string name, category; double price, rating;
-            if (!body || !getText(*body,"name",name,100) || !getText(*body,"category",category,50) ||
-                !getNumber(*body,"price",price) || price <= 0 || price > 1000000 ||
-                !getNumber(*body,"rating",rating) || rating < 0 || rating > 5) {
-                cb(errorResponse("Provide name (1-100 chars), category (1-50 chars), price > 0 and <= 1000000, and rating from 0 to 5", drogon::k400BadRequest)); return;
+    app.registerHandler(
+        "/api/admin/foods",
+        [](const drogon::HttpRequestPtr &request, Callback &&callback) {
+            auto body = request->getJsonObject();
+            std::string name;
+            std::string category;
+            double price;
+            double rating;
+            if (!body ||
+                !getText(*body, "name", name, 100) ||
+                !getText(*body, "category", category, 50) ||
+                !getNumber(*body, "price", price) ||
+                price <= 0 || price > 1000000 ||
+                !getNumber(*body, "rating", rating) ||
+                rating < 0 || rating > 5) {
+                callback(errorResponse(
+                    "Provide name (1-100 chars), category (1-50 chars), price > 0 and <= 1000000, and rating from 0 to 5",
+                    drogon::k400BadRequest));
+                return;
             }
             auto db = drogon::app().getDbClient("food_db");
             if (!db) {
-                cb(errorResponse("Database client unavailable",
-                                 drogon::k500InternalServerError));
+                callback(errorResponse("Database client unavailable",
+                                       drogon::k500InternalServerError));
                 return;
             }
-            db->execSqlAsync("INSERT INTO food_items(name,category,price,rating,availability) VALUES(?,?,?,?,1)",
-                [cb](const drogon::orm::Result &result) mutable {
-                    Json::Value out; out["message"]="Food item added"; out["id"]=static_cast<Json::Int64>(result.insertId());
-                    auto response=drogon::HttpResponse::newHttpJsonResponse(out); response->setStatusCode(drogon::k201Created); cb(response);
+            db->execSqlAsync(
+                "INSERT INTO food_items(name,category,price,rating,availability) VALUES(?,?,?,?,1)",
+                [callback](const drogon::orm::Result &result) mutable {
+                    Json::Value body;
+                    body["message"] = "Food item added";
+                    body["id"] = static_cast<Json::Int64>(result.insertId());
+                    auto response =
+                        drogon::HttpResponse::newHttpJsonResponse(body);
+                    response->setStatusCode(drogon::k201Created);
+                    callback(response);
                 },
-                [cb](const drogon::orm::DrogonDbException &e) mutable {
-                    LOG_ERROR << "Admin menu insert failed: " << e.base().what(); cb(errorResponse("Unable to add food item",drogon::k500InternalServerError));
-                }, name,category,price,rating);
-        }, {drogon::Post});
+                [callback](const drogon::orm::DrogonDbException &e) mutable {
+                    LOG_ERROR << "Admin menu insert failed: "
+                              << e.base().what();
+                    callback(errorResponse(
+                        "Unable to add food item",
+                        drogon::k500InternalServerError));
+                },
+                name, category, price, rating);
+        },
+        {drogon::Post});
 
-    app.registerHandler("/api/admin/foods",
-        [](const drogon::HttpRequestPtr &req, Callback &&cb) {
-            auto body=req->getJsonObject(); std::string name,category; double idValue,price,rating;
-            if (!body || !getNumber(*body,"id",idValue) || idValue < 1 ||
-                idValue > std::numeric_limits<int>::max() ||
-                std::floor(idValue)!=idValue ||
-                !getText(*body,"name",name,100) || !getText(*body,"category",category,50) ||
-                !getNumber(*body,"price",price) || price<=0 || price>1000000 ||
-                !getNumber(*body,"rating",rating) || rating<0 || rating>5) {
-                cb(errorResponse("Invalid food item fields",drogon::k400BadRequest)); return;
-            }
-            int id=static_cast<int>(idValue); auto db=drogon::app().getDbClient("food_db");
-            if (!db) {
-                cb(errorResponse("Database client unavailable",
-                                 drogon::k500InternalServerError));
+    app.registerHandler(
+        "/api/admin/foods",
+        [](const drogon::HttpRequestPtr &request, Callback &&callback) {
+            auto body = request->getJsonObject();
+            int id;
+            std::string name;
+            std::string category;
+            double price;
+            double rating;
+            if (!body ||
+                !getPositiveId(*body, id) ||
+                !getText(*body, "name", name, 100) ||
+                !getText(*body, "category", category, 50) ||
+                !getNumber(*body, "price", price) ||
+                price <= 0 || price > 1000000 ||
+                !getNumber(*body, "rating", rating) ||
+                rating < 0 || rating > 5) {
+                callback(errorResponse(
+                    "Invalid food item fields", drogon::k400BadRequest));
                 return;
             }
-            db->execSqlAsync("UPDATE food_items SET name=?,category=?,price=?,rating=? WHERE id=?",
-                [db,cb,id](const drogon::orm::Result &r) mutable {
-                    auto sendUpdated = [cb,id]() mutable {
-                        Json::Value out;
-                        out["message"] = "Food item updated";
-                        out["id"] = id;
-                        cb(drogon::HttpResponse::newHttpJsonResponse(out));
-                    };
-                    if (r.affectedRows() > 0) {
-                        sendUpdated();
+            auto db = drogon::app().getDbClient("food_db");
+            if (!db) {
+                callback(errorResponse("Database client unavailable",
+                                       drogon::k500InternalServerError));
+                return;
+            }
+            db->execSqlAsync(
+                "UPDATE food_items SET name=?,category=?,price=?,rating=? WHERE id=?",
+                [db, callback, id](const drogon::orm::Result &result) mutable {
+                    if (result.affectedRows() > 0) {
+                        callback(drogon::HttpResponse::newHttpJsonResponse(
+                            foodUpdatedResponse(id)));
                         return;
                     }
-                    db->execSqlAsync("SELECT id FROM food_items WHERE id=?",
-                        [cb,id](const drogon::orm::Result &rows) mutable {
+
+                    db->execSqlAsync(
+                        "SELECT id FROM food_items WHERE id=?",
+                        [callback, id](const drogon::orm::Result &rows) mutable {
                             if (rows.empty()) {
-                                cb(errorResponse("Food item not found",drogon::k404NotFound));
+                                callback(errorResponse(
+                                    "Food item not found",
+                                    drogon::k404NotFound));
                                 return;
                             }
-                            Json::Value out;
-                            out["message"] = "Food item updated";
-                            out["id"] = id;
-                            cb(drogon::HttpResponse::newHttpJsonResponse(out));
-                        },
-                        [cb](const drogon::orm::DrogonDbException &e) mutable {
-                            LOG_ERROR << "Food item lookup failed: " << e.base().what();
-                            cb(errorResponse("Unable to verify food item",drogon::k500InternalServerError));
-                        }, id);
-                },
-                [cb](const drogon::orm::DrogonDbException &e) mutable { LOG_ERROR << "Admin menu update failed: " << e.base().what(); cb(errorResponse("Unable to update food item",drogon::k500InternalServerError)); },
-                name,category,price,rating,id);
-        }, {drogon::Put});
 
-    app.registerHandler("/api/admin/foods/availability",
-        [](const drogon::HttpRequestPtr &req, Callback &&cb) {
-            auto body=req->getJsonObject(); double idValue;
-            if(!body || !getNumber(*body,"id",idValue) || idValue<1 ||
-               idValue > std::numeric_limits<int>::max() ||
-               std::floor(idValue)!=idValue ||
-               !body->isMember("availability") || !(*body)["availability"].isBool()) {
-                cb(errorResponse("Provide a valid id and boolean availability",drogon::k400BadRequest)); return;
-            }
-            int id=static_cast<int>(idValue); int availability=(*body)["availability"].asBool()?1:0;
-            auto db=drogon::app().getDbClient("food_db");
-            if (!db) {
-                cb(errorResponse("Database client unavailable",
-                                 drogon::k500InternalServerError));
+                            callback(drogon::HttpResponse::newHttpJsonResponse(
+                                foodUpdatedResponse(id)));
+                        },
+                        [callback](
+                            const drogon::orm::DrogonDbException &e) mutable {
+                            LOG_ERROR << "Food item lookup failed: "
+                                      << e.base().what();
+                            callback(errorResponse(
+                                "Unable to verify food item",
+                                drogon::k500InternalServerError));
+                        },
+                        id);
+                },
+                [callback](
+                    const drogon::orm::DrogonDbException &e) mutable {
+                    LOG_ERROR << "Admin menu update failed: "
+                              << e.base().what();
+                    callback(errorResponse(
+                        "Unable to update food item",
+                        drogon::k500InternalServerError));
+                },
+                name, category, price, rating, id);
+        },
+        {drogon::Put});
+
+    app.registerHandler(
+        "/api/admin/foods/availability",
+        [](const drogon::HttpRequestPtr &request, Callback &&callback) {
+            auto body = request->getJsonObject();
+            int id;
+            if (!body ||
+                !getPositiveId(*body, id) ||
+                !body->isMember("availability") ||
+                !(*body)["availability"].isBool()) {
+                callback(errorResponse(
+                    "Provide a valid id and boolean availability",
+                    drogon::k400BadRequest));
                 return;
             }
-            db->execSqlAsync("UPDATE food_items SET availability=? WHERE id=?",
-                [db,cb,id,availability](const drogon::orm::Result &r) mutable {
-                    auto sendUpdated = [cb,id,availability]() mutable {
-                        Json::Value out;
-                        out["message"] = availability
-                            ? "Food item is now available"
-                            : "Food item hidden from customers";
-                        out["id"] = id;
-                        out["availability"] = availability != 0;
-                        cb(drogon::HttpResponse::newHttpJsonResponse(out));
-                    };
-                    if (r.affectedRows() > 0) {
-                        sendUpdated();
+            const int availability =
+                (*body)["availability"].asBool() ? 1 : 0;
+            auto db = drogon::app().getDbClient("food_db");
+            if (!db) {
+                callback(errorResponse("Database client unavailable",
+                                       drogon::k500InternalServerError));
+                return;
+            }
+            db->execSqlAsync(
+                "UPDATE food_items SET availability=? WHERE id=?",
+                [db, callback, id, availability](
+                    const drogon::orm::Result &result) mutable {
+                    if (result.affectedRows() > 0) {
+                        callback(drogon::HttpResponse::newHttpJsonResponse(
+                            availabilityResponse(id, availability)));
                         return;
                     }
-                    db->execSqlAsync("SELECT id FROM food_items WHERE id=?",
-                        [cb,id,availability](const drogon::orm::Result &rows) mutable {
+
+                    db->execSqlAsync(
+                        "SELECT id FROM food_items WHERE id=?",
+                        [callback, id, availability](
+                            const drogon::orm::Result &rows) mutable {
                             if (rows.empty()) {
-                                cb(errorResponse("Food item not found",drogon::k404NotFound));
+                                callback(errorResponse(
+                                    "Food item not found",
+                                    drogon::k404NotFound));
                                 return;
                             }
-                            Json::Value out;
-                            out["message"] = availability
-                                ? "Food item is now available"
-                                : "Food item hidden from customers";
-                            out["id"] = id;
-                            out["availability"] = availability != 0;
-                            cb(drogon::HttpResponse::newHttpJsonResponse(out));
+
+                            callback(drogon::HttpResponse::newHttpJsonResponse(
+                                availabilityResponse(id, availability)));
                         },
-                        [cb](const drogon::orm::DrogonDbException &e) mutable {
-                            LOG_ERROR << "Food item lookup failed: " << e.base().what();
-                            cb(errorResponse("Unable to verify food item",drogon::k500InternalServerError));
-                        }, id);
+                        [callback](const drogon::orm::DrogonDbException &e) mutable {
+                            LOG_ERROR << "Food item lookup failed: "
+                                      << e.base().what();
+                            callback(errorResponse(
+                                "Unable to verify food item",
+                                drogon::k500InternalServerError));
+                        },
+                        id);
                 },
-                [cb](const drogon::orm::DrogonDbException &e) mutable { LOG_ERROR << "Availability update failed: " << e.base().what(); cb(errorResponse("Unable to update availability",drogon::k500InternalServerError)); },
-                availability,id);
-        }, {drogon::Put});
+                [callback](const drogon::orm::DrogonDbException &e) mutable {
+                    LOG_ERROR << "Availability update failed: "
+                              << e.base().what();
+                    callback(errorResponse(
+                        "Unable to update availability",
+                        drogon::k500InternalServerError));
+                },
+                availability, id);
+        },
+        {drogon::Put});
 }
