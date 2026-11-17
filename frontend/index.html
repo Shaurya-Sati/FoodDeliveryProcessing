@@ -8,49 +8,72 @@
 </head>
 <body>
     <header class="navbar">
-        <a class="logo" href="#">Foodie<span>.</span></a>
+        <a class="logo" href="#" aria-label="Foodie home">
+            <span class="logo-mark" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M5 8.5h14l-1.1 11H6.1L5 8.5Z" fill="currentColor"/><path d="M9 8.5V6a3 3 0 0 1 6 0v2.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M9 12v4m3-4v4m3-4v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>
+            </span>
+            <span class="logo-word">foodie<span>.</span></span>
+        </a>
         <div class="delivery-location">
-            <strong>Delivering to</strong>
-            <span>Your Location ▼</span>
+            <span class="location-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M19 10.1c0 5-7 11-7 11s-7-6-7-11a7 7 0 1 1 14 0Z" stroke="currentColor" stroke-width="1.8"/><circle cx="12" cy="10" r="2.3" stroke="currentColor" stroke-width="1.8"/></svg>
+            </span>
+            <span class="location-copy"><span>Delivering to</span><strong>Your Location <span aria-hidden="true">⌄</span></strong></span>
         </div>
-        <button class="cart-summary" id="scroll-cart-btn" type="button">
-            🛒 Cart: <span id="cart-count">0</span>
+        <nav class="primary-navigation" aria-label="Main navigation">
+            <button class="view-switch active" data-view="customer" type="button" aria-pressed="true">Customer View</button>
+            <button class="view-switch" data-view="admin" type="button" aria-pressed="false">Admin Dashboard</button>
+        </nav>
+        <button class="cart-summary" id="scroll-cart-btn" type="button" aria-label="View cart, 0 items">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.5a2 2 0 0 0 2-1.6L21 8H6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="10" cy="20" r="1.3" fill="currentColor"/><circle cx="18" cy="20" r="1.3" fill="currentColor"/></svg>
+            <span class="cart-label">Cart</span><span class="cart-badge" id="cart-count">0</span>
         </button>
     </header>
 
     <main>
+        <div id="customer-view">
         <section class="hero">
-            <div>
-                <p class="eyebrow">FRESH • FAST • DELICIOUS</p>
-                <h1>Hungry? We've got you.</h1>
-                <p>Discover delicious food from your favourite cuisines.</p>
+            <div class="hero-copy">
+                <p class="eyebrow"><span class="hero-spark" aria-hidden="true">✦</span> GOOD FOOD, RIGHT ON TIME</p>
+                <h1>Good food.<br><span>Great mood.</span></h1>
+                <p>Freshly made favourites, delivered to your door. Your next delicious moment is just a few clicks away.</p>
+                <a class="primary-btn hero-cta" href="#menu-section">Explore the menu <span aria-hidden="true">→</span></a>
+                <div class="hero-social-proof"><span class="hero-note-dot" aria-hidden="true">•</span><span>Find a new favourite in the menu below</span></div>
+            </div>
+            <div class="hero-visual">
+                <img src="assets/food/hero-table.jpg" alt="A table filled with freshly prepared dishes" data-food-photo fetchpriority="high">
+                <span class="hero-photo-tag"><span aria-hidden="true">✦</span> Made fresh, just for you</span>
+                <span class="hero-fresh-badge"><strong>YUM</strong><span>starts here</span></span>
             </div>
         </section>
 
         <section class="search-section">
             <label class="sr-only" for="searchInput">Search food</label>
-            <input type="search" id="searchInput" placeholder="Search for pizza, biryani, burgers...">
+            <span class="search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4.2 4.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></span>
+            <input type="search" id="searchInput" placeholder="Search dishes, cuisines and more..." autocomplete="off">
+            <span class="search-hint">Find your next favourite</span>
         </section>
 
         <section class="categories">
-            <h2>What's on your mind?</h2>
+            <div class="customer-section-heading"><div><p class="eyebrow">A LITTLE INSPIRATION</p><h2>What are you craving?</h2></div></div>
             <div class="category-list">
-                <button class="category-btn active" data-category="All">All</button>
-                <button class="category-btn" data-category="Pizza">🍕 Pizza</button>
-                <button class="category-btn" data-category="Burger">🍔 Burgers</button>
-                <button class="category-btn" data-category="Biryani">🍛 Biryani</button>
-                <button class="category-btn" data-category="Chinese">🥡 Chinese</button>
-                <button class="category-btn" data-category="Dessert">🍰 Desserts</button>
+                <button class="category-btn active" data-category="All"><span class="category-art all-art">All</span><span>Everything</span></button>
+                <button class="category-btn" data-category="Pizza"><img class="category-art" data-food-photo src="assets/food/pizza-classic.jpg" alt=""><span>Pizza</span></button>
+                <button class="category-btn" data-category="Burger"><img class="category-art" data-food-photo src="assets/food/burger-classic.jpg" alt=""><span>Burgers</span></button>
+                <button class="category-btn" data-category="Biryani"><img class="category-art" data-food-photo src="assets/food/biryani.jpg" alt=""><span>Biryani</span></button>
+                <button class="category-btn" data-category="Chinese"><img class="category-art" data-food-photo src="assets/food/noodles.jpg" alt=""><span>Chinese</span></button>
+                <button class="category-btn" data-category="Dessert"><img class="category-art" data-food-photo src="assets/food/chocolate-cake.jpg" alt=""><span>Desserts</span></button>
             </div>
         </section>
 
-        <section class="food-section">
+        <section class="food-section" id="menu-section">
             <div class="section-heading">
-                <div>
+                <div class="customer-section-heading">
                     <p class="eyebrow">OUR MENU</p>
-                    <h2>Popular dishes</h2>
+                    <h2>Made for your cravings</h2>
+                    <p class="muted">A few delicious reasons to make today a little better.</p>
                 </div>
-                <button class="secondary-btn" id="reload-foods-btn" type="button">Refresh menu</button>
+                <button class="secondary-btn" id="reload-foods-btn" type="button"><span aria-hidden="true">↻</span> Refresh menu</button>
             </div>
             <div id="food-list" class="food-grid">
                 <p>Loading food items...</p>
@@ -59,91 +82,123 @@
 
         <section class="cart-section" id="cart-section">
             <div class="section-heading">
-                <div>
-                    <p class="eyebrow">YOUR SELECTION</p>
-                    <h2>Your Cart</h2>
+                <div class="customer-section-heading">
+                    <p class="eyebrow">YOUR LITTLE FEAST</p>
+                    <h2>Your cart</h2>
+                    <p class="muted">Good choices. Let's make it official.</p>
                 </div>
-                <button id="clear-cart-btn" class="secondary-btn" type="button">Clear cart</button>
+                <button id="clear-cart-btn" class="text-btn" type="button">Clear cart</button>
             </div>
             <div id="cart-items"><p class="muted">Your cart is empty. Add something delicious!</p></div>
             <div class="cart-footer">
-                <p class="cart-total">Total <strong>₹<span id="cart-total">0.00</span></strong></p>
-                <button id="checkout-btn" class="primary-btn" type="button" disabled>Place order</button>
+                <div class="cart-total"><span>Subtotal</span><strong>₹<span id="cart-total">0.00</span></strong></div>
+                <button id="checkout-btn" class="primary-btn checkout-btn" type="button" disabled>Place order <span aria-hidden="true">→</span></button>
             </div>
             <p id="checkout-message" class="notice" role="status" aria-live="polite"></p>
         </section>
 
-        <section class="orders-section" id="orders-section">
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">ORDER TRACKING</p>
-                    <h2>Recent orders</h2>
-                    <p class="muted">Orders are loaded from the MySQL-backed API.</p>
-                </div>
-                <div class="order-tools">
-                    <label class="sr-only" for="status-filter">Filter by status</label>
-                    <select id="status-filter">
-                        <option value="ALL">All statuses</option>
-                        <option value="PLACED">Placed</option>
-                        <option value="PREPARING">Preparing</option>
-                        <option value="READY">Ready</option>
-                    </select>
-                    <button id="refresh-orders-btn" class="secondary-btn" type="button">Refresh orders</button>
-                </div>
-            </div>
-            <p id="orders-message" class="notice" role="status" aria-live="polite"></p>
-            <div class="table-wrap">
-                <table class="orders-table">
-                    <thead>
-                        <tr>
-                            <th>Order</th>
-                            <th>Items</th>
-                            <th>Total</th>
-                            <th>Placed at</th>
-                            <th>Status</th>
-                            <th>Admin action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="orders-table-body">
-                        <tr><td colspan="6" class="empty-cell">Click Refresh orders to load orders.</td></tr>
-                    </tbody>
-                </table>
-            </div>
+        <section class="customer-orders-section" id="customer-orders-section">
+            <div class="section-heading"><div class="customer-section-heading"><p class="eyebrow">THE GOOD STUFF, AGAIN</p><h2>Your recent orders</h2><p class="muted">A little look at what you've been enjoying.</p></div><button id="refresh-customer-orders-btn" class="secondary-btn" type="button">Refresh orders</button></div>
+            <p id="customer-orders-message" class="notice" role="status" aria-live="polite"></p>
+            <div id="customer-orders-list" class="customer-orders-list"><p class="muted">Loading your recent orders…</p></div>
         </section>
-        <section class="reports-section" id="reports-section">
-            <div class="section-heading">
-                <div>
-                    <p class="eyebrow">DATABASE SUMMARY</p>
-                    <h2>Order reports</h2>
+        </div>
+
+        <section id="admin-dashboard" class="admin-dashboard" hidden>
+            <div class="admin-shell">
+                <aside class="admin-sidebar">
+                    <div class="sidebar-brand"><span class="brand-mark">F</span><div><strong>Foodie</strong><span>OPERATIONS</span></div></div>
+                    <p class="sidebar-label">WORKSPACE</p>
+                    <nav class="sidebar-navigation" aria-label="Admin dashboard sections">
+                        <button class="sidebar-link active" data-admin-section="dashboard-overview" type="button"><span>◫</span>Dashboard Overview</button>
+                        <button class="sidebar-link" data-admin-section="admin-menu-section" type="button"><span>▤</span>Manage Food Items</button>
+                        <button class="sidebar-link" data-admin-section="orders-section" type="button"><span>▣</span>Manage Orders</button>
+                        <button class="sidebar-link" data-admin-section="processing-section" type="button"><span>↗</span>Order Processing</button>
+                        <button class="sidebar-link" data-admin-section="reports-section" type="button"><span>▥</span>Reports &amp; Analytics</button>
+                    </nav>
+                    <button class="back-to-customer" data-view="customer" type="button">← Back to Customer View</button>
+                </aside>
+                <div class="admin-workspace">
+                    <section class="dashboard-section" id="dashboard-overview">
+                        <div class="dashboard-topline">
+                            <div><p class="eyebrow">OVERVIEW</p><h1>Dashboard Overview</h1><p class="muted">A real-time view of your restaurant operations.</p></div>
+                            <span class="live-indicator"><span></span> Live API data</span>
+                        </div>
+                        <p id="dashboard-message" class="notice" role="status" aria-live="polite"></p>
+                        <div class="metric-grid">
+                            <article class="metric-card"><span class="metric-icon orange">▣</span><span class="metric-label">Total Orders</span><strong id="metric-total-orders">—</strong><small>All-time orders</small></article>
+                            <article class="metric-card"><span class="metric-icon green">₹</span><span class="metric-label">Total Revenue</span><strong id="metric-revenue">—</strong><small>Value of all orders</small></article>
+                            <article class="metric-card"><span class="metric-icon purple">▤</span><span class="metric-label">Total Food Items</span><strong id="metric-foods">—</strong><small>Across the menu</small></article>
+                            <article class="metric-card"><span class="metric-icon green">✓</span><span class="metric-label">Available Items</span><strong id="metric-available-foods">—</strong><small>Visible to customers</small></article>
+                            <article class="metric-card"><span class="metric-icon amber">◷</span><span class="metric-label">Pending Orders</span><strong id="metric-pending-orders">—</strong><small>Placed or preparing</small></article>
+                            <article class="metric-card"><span class="metric-icon blue">✓</span><span class="metric-label">Completed Orders</span><strong id="metric-completed-orders">—</strong><small>Ready for customers</small></article>
+                        </div>
+                        <div class="dashboard-panel overview-note">
+                            <div><p class="eyebrow">ORDER WORKFLOW</p><h2>Keep every order moving</h2><p class="muted">Monitor incoming orders, update their status, and keep your menu current from one place.</p></div>
+                            <button class="primary-btn" data-admin-section="orders-section" type="button">Review orders <span aria-hidden="true">→</span></button>
+                        </div>
+                    </section>
+
+                    <section class="dashboard-section dashboard-panel admin-menu-section" id="admin-menu-section">
+                        <div class="section-heading">
+                            <div><p class="eyebrow">YOUR CATALOG</p><h2>Manage Food Items</h2><p class="muted">Add dishes, update details, or change what customers can order.</p></div>
+                            <button class="secondary-btn" id="refresh-admin-menu-btn" type="button">Refresh menu</button>
+                        </div>
+                        <form id="food-admin-form" class="food-admin-form">
+                            <input type="hidden" id="admin-food-id">
+                            <label>Food name<input id="admin-food-name" maxlength="100" required placeholder="e.g. Paneer Tikka"></label>
+                            <label>Category<input id="admin-food-category" maxlength="50" required placeholder="e.g. Indian"></label>
+                            <label>Price (₹)<input id="admin-food-price" type="number" min="0.01" max="1000000" step="0.01" required></label>
+                            <label>Rating (0–5)<input id="admin-food-rating" type="number" min="0" max="5" step="0.1" value="4.0" required></label>
+                            <div class="admin-form-actions"><button class="primary-btn" id="save-food-btn" type="submit">Add food item</button><button class="secondary-btn" id="cancel-food-edit-btn" type="button" hidden>Cancel edit</button></div>
+                        </form>
+                        <p id="admin-menu-message" class="notice" role="status" aria-live="polite"></p>
+                        <div class="table-toolbar">
+                            <label class="search-control"><span aria-hidden="true">⌕</span><input id="admin-food-search" type="search" placeholder="Search food items" aria-label="Search food items"></label>
+                            <label class="sr-only" for="admin-food-availability">Filter by availability</label>
+                            <select id="admin-food-availability"><option value="ALL">All availability</option><option value="AVAILABLE">Available</option><option value="HIDDEN">Hidden</option></select>
+                        </div>
+                        <div class="table-wrap"><table class="orders-table"><thead><tr><th>Food ID</th><th>Food Name</th><th>Category</th><th>Price</th><th>Availability</th><th>Actions</th></tr></thead><tbody id="admin-food-table-body"><tr><td colspan="6" class="empty-cell">Menu items will appear here.</td></tr></tbody></table></div>
+                    </section>
+
+                    <section class="dashboard-section dashboard-panel orders-section" id="orders-section">
+                        <div class="section-heading">
+                            <div><p class="eyebrow">ORDER MANAGEMENT</p><h2>Manage Orders</h2><p class="muted">Review orders and update their processing status.</p></div>
+                            <div class="order-tools">
+                                <label class="sr-only" for="status-filter">Filter orders by status</label>
+                                <select id="status-filter"><option value="ALL">All statuses</option><option value="PLACED">PLACED</option><option value="PREPARING">PREPARING</option><option value="READY">READY</option></select>
+                                <button id="refresh-orders-btn" class="secondary-btn" type="button">Refresh orders</button>
+                            </div>
+                        </div>
+                        <p id="orders-message" class="notice" role="status" aria-live="polite"></p>
+                        <div class="table-wrap"><table class="orders-table"><thead><tr><th>Order ID</th><th>Order Date</th><th>Items / Quantity</th><th>Total Amount</th><th>Current Status</th><th>Actions</th></tr></thead><tbody id="orders-table-body"><tr><td colspan="6" class="empty-cell">Orders will appear here.</td></tr></tbody></table></div>
+                    </section>
+
+                    <section class="dashboard-section dashboard-panel processing-section" id="processing-section">
+                        <div class="section-heading"><div><p class="eyebrow">LIVE OPERATIONS</p><h2>Order Processing</h2><p class="muted">Follow orders through each step of preparation.</p></div><span class="refresh-caption">Updates every 15 seconds while this dashboard is open</span></div>
+                        <div class="status-flow" aria-label="Order status flow">
+                            <div><span class="flow-number">1</span><strong>PLACED</strong><small>Order received</small></div><span class="flow-connector"></span>
+                            <div><span class="flow-number">2</span><strong>PREPARING</strong><small>Kitchen is preparing</small></div><span class="flow-connector"></span>
+                            <div><span class="flow-number">3</span><strong>READY</strong><small>Ready for pickup</small></div>
+                        </div>
+                        <h3 class="subsection-title">Latest orders</h3>
+                        <div id="processing-orders" class="processing-order-list"><p class="muted">Orders will appear here when loaded.</p></div>
+                    </section>
+
+                    <section class="dashboard-section dashboard-panel reports-section" id="reports-section">
+                        <div class="section-heading"><div><p class="eyebrow">BUSINESS PERFORMANCE</p><h2>Reports &amp; Analytics</h2><p class="muted">Order and revenue totals from the reporting API.</p></div><button class="secondary-btn" id="refresh-reports-btn" type="button">Refresh reports</button></div>
+                        <p id="reports-message" class="notice" role="status" aria-live="polite"></p>
+                        <div class="report-grid" id="report-summary"><p class="muted">Report data will appear here.</p></div>
+                        <div class="report-chart">
+                            <div><h3>Orders by status</h3><p class="muted">Current order distribution</p></div>
+                            <div id="status-chart" class="status-chart"><p class="muted">Status data will appear here.</p></div>
+                        </div>
+                    </section>
                 </div>
-                <button class="secondary-btn" id="refresh-reports-btn" type="button">Refresh reports</button>
             </div>
-            <p id="reports-message" class="notice" role="status" aria-live="polite"></p>
-            <div class="report-grid" id="report-summary">
-                <p class="muted">Loading order summary…</p>
-            </div>
-        </section>
-
-
-        <section class="admin-menu-section" id="admin-menu-section">
-            <div class="section-heading">
-                <div><p class="eyebrow">ADMIN TOOLS</p><h2>Menu management</h2><p class="muted">Add dishes, edit menu details, or temporarily hide an item from customers.</p></div>
-                <button class="secondary-btn" id="refresh-admin-menu-btn" type="button">Refresh admin menu</button>
-            </div>
-            <form id="food-admin-form" class="food-admin-form">
-                <input type="hidden" id="admin-food-id">
-                <label>Food name<input id="admin-food-name" maxlength="100" required placeholder="e.g. Paneer Tikka"></label>
-                <label>Category<input id="admin-food-category" maxlength="50" required placeholder="e.g. Indian"></label>
-                <label>Price (₹)<input id="admin-food-price" type="number" min="0.01" max="1000000" step="0.01" required></label>
-                <label>Rating (0–5)<input id="admin-food-rating" type="number" min="0" max="5" step="0.1" value="4.0" required></label>
-                <div class="admin-form-actions"><button class="primary-btn" id="save-food-btn" type="submit">Add food item</button><button class="secondary-btn" id="cancel-food-edit-btn" type="button" hidden>Cancel edit</button></div>
-            </form>
-            <p id="admin-menu-message" class="notice" role="status" aria-live="polite"></p>
-            <div class="table-wrap"><table class="orders-table"><thead><tr><th>ID</th><th>Name</th><th>Category</th><th>Price</th><th>Rating</th><th>Availability</th><th>Actions</th></tr></thead><tbody id="admin-food-table-body"><tr><td colspan="7" class="empty-cell">Loading admin menu…</td></tr></tbody></table></div>
         </section>
     </main>
 
-    <footer><p>Foodie. — Made with ❤️ for food lovers</p><p class="muted">Academic demonstration project • C++ • Drogon • MySQL</p><p class="muted">Admin endpoints are demonstration-only and are not protected by authentication.</p></footer>
     <script src="script.js"></script>
 </body>
 </html>

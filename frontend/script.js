@@ -22,15 +22,86 @@ const ordersMessage = document.getElementById("orders-message");
 const statusFilter = document.getElementById("status-filter");
 const reportsMessage = document.getElementById("reports-message");
 const reportSummary = document.getElementById("report-summary");
+const customerView = document.getElementById("customer-view");
+const adminDashboard = document.getElementById("admin-dashboard");
+const dashboardMessage = document.getElementById("dashboard-message");
+const adminFoodSearch = document.getElementById("admin-food-search");
+const adminFoodAvailability = document.getElementById("admin-food-availability");
 
-const foodDetails = {
-    1: { emoji: "🍕", description: "Classic cheese pizza" },
-    2: { emoji: "🍔", description: "Juicy burger with cheese" },
-    3: { emoji: "🍛", description: "Aromatic biryani with spices" },
-    4: { emoji: "🍜", description: "Stir-fried noodles and vegetables" },
-    5: { emoji: "🍰", description: "Rich chocolate dessert" },
-    6: { emoji: "🍕", description: "Pizza loaded with vegetables" }
+let latestReport = null;
+let adminFoodsLoaded = false;
+let dashboardRefreshTimer = null;
+let currentOrders = [];
+
+const FOOD_PHOTO_PATH = "assets/food/";
+const foodPhotoAssets = {
+    pizza: "pizza-classic.jpg",
+    vegetablePizza: "pizza-vegetable.jpg",
+    burger: "burger-classic.jpg",
+    grilledBurger: "burger-grilled.jpg",
+    biryani: "biryani.jpg",
+    riceBowl: "rice-bowl.jpg",
+    noodles: "noodles.jpg",
+    cake: "chocolate-cake.jpg",
+    dessert: "dessert.jpg",
+    meal: "hero-table.jpg"
 };
+
+function foodPhoto(food) {
+    const item = `${food.name} ${food.category}`.toLowerCase();
+    let asset = foodPhotoAssets.meal;
+    if (/pizza/.test(item)) {
+        asset = /vegetable|veggie|garden|margherita/.test(item)
+            ? foodPhotoAssets.vegetablePizza
+            : foodPhotoAssets.pizza;
+    } else if (/burger/.test(item)) {
+        asset = /grill|smok|bbq|chicken|crispy|double/.test(item)
+            ? foodPhotoAssets.grilledBurger
+            : foodPhotoAssets.burger;
+    } else if (/biryani/.test(item)) {
+        asset = foodPhotoAssets.biryani;
+    } else if (/chinese|noodle|chow mein|chowmein|lo mein/.test(item)) {
+        asset = /rice|fried rice/.test(item)
+            ? foodPhotoAssets.riceBowl
+            : foodPhotoAssets.noodles;
+    } else if (/dessert|cake|chocolate|brownie|ice cream/.test(item)) {
+        asset = /cake|chocolate|brownie/.test(item)
+            ? foodPhotoAssets.cake
+            : foodPhotoAssets.dessert;
+    }
+    return `${FOOD_PHOTO_PATH}${asset}`;
+}
+
+function bindImageFallbacks(container) {
+    container.querySelectorAll("img[data-food-photo]").forEach(image => {
+        const showFallback = () => {
+            const foodMedia = image.closest(".food-media");
+            const heroVisual = image.closest(".hero-visual");
+            const categoryButton = image.closest(".category-btn");
+            if (foodMedia) {
+                foodMedia.classList.add("image-failed");
+                image.remove();
+            } else if (heroVisual) {
+                heroVisual.classList.add("image-failed");
+                image.remove();
+            } else if (categoryButton) {
+                const fallback = document.createElement("span");
+                fallback.className = "category-art category-image-fallback";
+                fallback.textContent = "No photo";
+                image.replaceWith(fallback);
+            } else if (image.classList.contains("admin-food-thumb")) {
+                const fallback = document.createElement("span");
+                fallback.className = "admin-food-thumb-fallback";
+                fallback.textContent = "No photo";
+                image.replaceWith(fallback);
+            } else {
+                image.remove();
+            }
+        };
+        image.addEventListener("error", showFallback, { once: true });
+        if (image.complete && !image.naturalWidth) showFallback();
+    });
+}
 
 function money(value) {
     return Number(value || 0).toFixed(2);
@@ -73,7 +144,9 @@ function displayFoods() {
     const filteredFoods = foods.filter(food => {
         const matchesSearch = food.name.toLowerCase().includes(searchText) ||
             food.category.toLowerCase().includes(searchText);
-        const matchesCategory = selectedCategory === "All" || food.category === selectedCategory;
+        const category = food.category.toLowerCase().replace(/s$/, "");
+        const selected = selectedCategory.toLowerCase().replace(/s$/, "");
+        const matchesCategory = selectedCategory === "All" || category === selected;
         return matchesSearch && matchesCategory;
     });
 
@@ -83,22 +156,24 @@ function displayFoods() {
     }
 
     foodList.innerHTML = filteredFoods.map(food => {
-        const details = foodDetails[food.id] || { emoji: "🍽️", description: "Freshly prepared and delicious" };
         return `
             <article class="food-card">
-                <div class="food-image" aria-hidden="true">${details.emoji}</div>
+                <div class="food-media">
+                    <img class="food-photo" data-food-photo src="${foodPhoto(food)}" alt="${escapeHtml(food.name)}" loading="lazy">
+                    <span class="food-availability">Available now</span>
+                </div>
                 <div class="food-details">
                     <p class="food-category">${escapeHtml(food.category)}</p>
                     <h3>${escapeHtml(food.name)}</h3>
-                    <p class="food-description">${details.description}</p>
                     <div class="food-meta">
                         <span class="food-price">₹${money(food.price)}</span>
-                        <span class="food-rating">★ ${escapeHtml(food.rating)}</span>
+                        ${Number.isFinite(Number(food.rating)) ? `<span class="food-rating" aria-label="Rated ${escapeHtml(food.rating)} out of 5">★ ${escapeHtml(food.rating)}</span>` : ""}
                     </div>
                     <button class="primary-btn add-cart-btn" data-id="${Number(food.id)}" type="button">Add to cart</button>
                 </div>
             </article>`;
     }).join("");
+    bindImageFallbacks(foodList);
 }
 
 function addToCart(foodId) {
@@ -118,6 +193,10 @@ function updateCart() {
     });
 
     cartCount.textContent = totalItems;
+    document.getElementById("scroll-cart-btn").setAttribute(
+        "aria-label",
+        `View cart, ${totalItems} ${totalItems === 1 ? "item" : "items"}`
+    );
     cartTotal.textContent = money(totalPrice);
     checkoutButton.disabled = totalItems === 0 || submittingOrder;
 
@@ -129,16 +208,20 @@ function updateCart() {
     cartItems.innerHTML = selectedFoods.map(food => `
         <div class="cart-item">
             <div class="cart-item-info">
-                <strong>${escapeHtml(food.name)}</strong>
-                <p>₹${money(food.price)} × ${cart[food.id]}</p>
+                <img class="cart-item-thumb" data-food-photo src="${foodPhoto(food)}" alt="" loading="lazy">
+                <div><strong>${escapeHtml(food.name)}</strong><p>₹${money(food.price)} each</p></div>
             </div>
             <div class="cart-item-actions">
-                <button class="quantity-btn" data-action="decrease" data-id="${Number(food.id)}" aria-label="Decrease ${escapeHtml(food.name)} quantity">−</button>
-                <span class="quantity-value">${cart[food.id]}</span>
-                <button class="quantity-btn" data-action="increase" data-id="${Number(food.id)}" aria-label="Increase ${escapeHtml(food.name)} quantity">+</button>
+                <div class="quantity-control">
+                    <button class="quantity-btn" data-action="decrease" data-id="${Number(food.id)}" aria-label="Decrease ${escapeHtml(food.name)} quantity">−</button>
+                    <span class="quantity-value">${cart[food.id]}</span>
+                    <button class="quantity-btn" data-action="increase" data-id="${Number(food.id)}" aria-label="Increase ${escapeHtml(food.name)} quantity">+</button>
+                </div>
+                <strong class="cart-item-line-total">₹${money(Number(food.price) * cart[food.id])}</strong>
                 <button class="text-btn remove-item-btn" data-id="${Number(food.id)}" type="button">Remove</button>
             </div>
         </div>`).join("");
+    bindImageFallbacks(cartItems);
 }
 
 document.addEventListener("click", event => {
@@ -183,6 +266,10 @@ document.getElementById("scroll-cart-btn").addEventListener("click", () => {
     document.getElementById("cart-section").scrollIntoView({ behavior: "smooth" });
 });
 document.getElementById("reload-foods-btn").addEventListener("click", loadFoods);
+document.getElementById("refresh-customer-orders-btn").addEventListener(
+    "click",
+    () => loadOrders()
+);
 
 checkoutButton.addEventListener("click", async () => {
     const items = foods.filter(food => (cart[food.id] || 0) > 0).map(food => ({
@@ -270,9 +357,9 @@ function renderOrders(orders) {
         return `
             <tr>
                 <td><strong>#${order.id}</strong></td>
+                <td>${timestamp}</td>
                 <td>${itemsText}</td>
                 <td class="table-total">₹${money(order.total)}</td>
-                <td>${timestamp}</td>
                 <td><span class="status-pill ${statusClass(order.status)}">${escapeHtml(order.status)}</span></td>
                 <td>
                     <div class="admin-action">
@@ -288,6 +375,53 @@ function renderOrders(orders) {
     }).join("");
 }
 
+function renderProcessingMonitor(orders) {
+    const monitor = document.getElementById("processing-orders");
+    const latestOrders = orders.slice(0, 5);
+    if (!latestOrders.length) {
+        monitor.innerHTML = '<p class="muted">No orders have been placed yet.</p>';
+        return;
+    }
+
+    monitor.innerHTML = latestOrders.map(order => {
+        const items = order.items.length
+            ? order.items.map(item => `${escapeHtml(item.name)} × ${item.quantity}`).join(", ")
+            : "No item details";
+        return `<div class="processing-order">
+            <strong>Order #${order.id}</strong>
+            <span class="processing-order-items">${items}</span>
+            <span class="status-pill ${statusClass(order.status)}">${escapeHtml(order.status)}</span>
+        </div>`;
+    }).join("");
+}
+
+function renderCustomerOrders(orders) {
+    const list = document.getElementById("customer-orders-list");
+    const message = document.getElementById("customer-orders-message");
+    const latestOrders = orders.slice(0, 3);
+
+    if (!latestOrders.length) {
+        list.innerHTML = '<p class="muted">Your next favourite meal is only a few clicks away.</p>';
+        message.textContent = "";
+        return;
+    }
+
+    list.innerHTML = latestOrders.map(order => {
+        const items = order.items.length
+            ? order.items.map(item => `${escapeHtml(item.name)} × ${item.quantity}`).join(" · ")
+            : "Order details unavailable";
+        return `<article class="customer-order-card">
+            <div class="customer-order-top">
+                <div><strong>Order #${order.id}</strong><span class="customer-order-date">${order.createdAt ? escapeHtml(order.createdAt) : "Recently placed"}</span></div>
+                <span class="status-pill ${statusClass(order.status)}">${escapeHtml(order.status)}</span>
+            </div>
+            <p class="customer-order-items">${items}</p>
+            <div class="customer-order-bottom"><span>Order total</span><strong>₹${money(order.total)}</strong></div>
+        </article>`;
+    }).join("");
+    message.textContent = `Showing your ${latestOrders.length} most recent order(s).`;
+}
+
 let ordersLoading = false;
 async function loadOrders(quiet = false) {
     if (ordersLoading) return;
@@ -299,20 +433,28 @@ async function loadOrders(quiet = false) {
     try {
         const response = await fetch(ORDER_API_URL);
         const rows = await readJsonResponse(response);
-        renderOrders(groupOrders(rows));
+        currentOrders = groupOrders(rows);
+        renderOrders(currentOrders);
+        renderProcessingMonitor(currentOrders);
+        renderCustomerOrders(currentOrders);
         ordersMessage.textContent = `Loaded ${new Set(rows.map(row => row.order_id)).size} order(s).`;
     } catch (error) {
         console.error("Failed to load orders:", error);
         ordersMessage.className = "notice error-text";
         ordersMessage.textContent = `${error.message}. Check the backend connection.`;
         ordersBody.innerHTML = '<tr><td colspan="6" class="empty-cell">Could not load orders.</td></tr>';
+        document.getElementById("processing-orders").innerHTML =
+            '<p class="error-text">Could not load processing data.</p>';
+        document.getElementById("customer-orders-list").innerHTML =
+            '<p class="error-text">Could not load recent orders. Please try again.</p>';
+        document.getElementById("customer-orders-message").textContent = "";
     } finally {
         ordersLoading = false;
     }
 }
 
 document.getElementById("refresh-orders-btn").addEventListener("click", () => loadOrders());
-statusFilter.addEventListener("change", () => loadOrders());
+statusFilter.addEventListener("change", () => renderOrders(currentOrders));
 
 ordersBody.addEventListener("click", async event => {
     const button = event.target.closest(".update-status-btn");
@@ -344,9 +486,48 @@ ordersBody.addEventListener("click", async event => {
     }
 });
 
+document.querySelectorAll("[data-view]").forEach(button => {
+    button.addEventListener("click", () => {
+        const showAdmin = button.dataset.view === "admin";
+        customerView.hidden = showAdmin;
+        adminDashboard.hidden = !showAdmin;
+        document.body.classList.toggle("admin-mode", showAdmin);
+
+        document.querySelectorAll(".view-switch").forEach(switchButton => {
+            const active = switchButton.dataset.view === button.dataset.view;
+            switchButton.classList.toggle("active", active);
+            switchButton.setAttribute("aria-pressed", String(active));
+        });
+
+        if (dashboardRefreshTimer) {
+            clearInterval(dashboardRefreshTimer);
+            dashboardRefreshTimer = null;
+        }
+        if (showAdmin) {
+            dashboardMessage.textContent =
+                "Summary values appear when the menu and reports APIs respond.";
+            Promise.all([loadAdminFoods(), loadOrders(), loadReports()]);
+            dashboardRefreshTimer = setInterval(() => {
+                if (!adminDashboard.hidden) loadOrders(true);
+            }, 15000);
+        }
+    });
+});
+
+document.querySelectorAll("[data-admin-section]").forEach(button => {
+    button.addEventListener("click", () => {
+        const section = document.getElementById(button.dataset.adminSection);
+        if (!section) return;
+        document.querySelectorAll(".sidebar-link").forEach(link => {
+            link.classList.toggle("active", link.dataset.adminSection === button.dataset.adminSection);
+        });
+        section.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+});
+
+bindImageFallbacks(customerView);
 loadFoods();
 loadOrders();
-setInterval(() => loadOrders(true), 5000);
 
 async function loadReports() {
     reportsMessage.className = "notice";
@@ -359,6 +540,7 @@ async function loadReports() {
         if (!report || fields.some(field => !Number.isFinite(Number(report[field])))) {
             throw new Error("The reports API returned an invalid response.");
         }
+        latestReport = report;
         reportSummary.innerHTML = `
             <article class="report-card"><span>Total orders</span><strong>${Number(report.total_orders)}</strong></article>
             <article class="report-card"><span>Total order value</span><strong>₹${money(report.total_value)}</strong></article>
@@ -366,17 +548,58 @@ async function loadReports() {
             <article class="report-card"><span>Placed</span><strong>${Number(report.placed_orders)}</strong></article>
             <article class="report-card"><span>Preparing</span><strong>${Number(report.preparing_orders)}</strong></article>
             <article class="report-card"><span>Ready</span><strong>${Number(report.ready_orders)}</strong></article>`;
+        renderStatusChart(report);
+        updateDashboardStats();
         reportsMessage.textContent = "Report summary loaded.";
     } catch (error) {
         console.error("Failed to load order reports:", error);
         reportSummary.innerHTML = '<p class="muted">Report data is unavailable.</p>';
+        document.getElementById("status-chart").innerHTML =
+            '<p class="muted">Status data is unavailable.</p>';
         reportsMessage.className = "notice error-text";
         reportsMessage.textContent = `${error.message}. Check the backend connection.`;
     }
 }
 
+function updateDashboardStats() {
+    document.getElementById("metric-total-orders").textContent =
+        latestReport ? Number(latestReport.total_orders).toLocaleString() : "—";
+    document.getElementById("metric-revenue").textContent =
+        latestReport ? `₹${money(latestReport.total_value)}` : "—";
+    document.getElementById("metric-pending-orders").textContent =
+        latestReport
+            ? Number(latestReport.placed_orders) + Number(latestReport.preparing_orders)
+            : "—";
+    document.getElementById("metric-completed-orders").textContent =
+        latestReport ? Number(latestReport.ready_orders) : "—";
+    document.getElementById("metric-foods").textContent =
+        adminFoodsLoaded ? adminFoods.length.toLocaleString() : "—";
+    document.getElementById("metric-available-foods").textContent =
+        adminFoodsLoaded
+            ? adminFoods.filter(food => food.availability).length.toLocaleString()
+            : "—";
+}
+
+function renderStatusChart(report) {
+    const statuses = [
+        ["PLACED", Number(report.placed_orders)],
+        ["PREPARING", Number(report.preparing_orders)],
+        ["READY", Number(report.ready_orders)]
+    ];
+    const maximum = Math.max(...statuses.map(([, count]) => count));
+    document.getElementById("status-chart").innerHTML = statuses.map(([status, count]) => {
+        const width = maximum ? (count / maximum) * 100 : 0;
+        return `<div class="chart-row">
+            <span>${status}</span>
+            <div class="chart-track" role="img" aria-label="${status}: ${count} orders">
+                <div class="chart-bar" style="width:${width}%"></div>
+            </div>
+            <strong>${count}</strong>
+        </div>`;
+    }).join("");
+}
+
 document.getElementById("refresh-reports-btn").addEventListener("click", loadReports);
-loadReports();
 
 
 // Admin menu management. These endpoints use prepared statements in the C++ API.
@@ -408,13 +631,24 @@ function resetAdminFoodForm() {
 }
 
 function renderAdminFoods() {
-    if (!adminFoods.length) {
+    const searchText = adminFoodSearch.value.trim().toLowerCase();
+    const availability = adminFoodAvailability.value;
+    const visibleFoods = adminFoods.filter(food => {
+        const matchesSearch = food.name.toLowerCase().includes(searchText) ||
+            food.category.toLowerCase().includes(searchText);
+        const matchesAvailability = availability === "ALL" ||
+            (availability === "AVAILABLE" && food.availability) ||
+            (availability === "HIDDEN" && !food.availability);
+        return matchesSearch && matchesAvailability;
+    });
+
+    if (!visibleFoods.length) {
         adminFoodTableBody.innerHTML =
-            '<tr><td colspan="7" class="empty-cell">No menu items found.</td></tr>';
+            `<tr><td colspan="6" class="empty-cell">${adminFoods.length ? "No food items match your search." : "No menu items found."}</td></tr>`;
         return;
     }
 
-    adminFoodTableBody.innerHTML = adminFoods.map(food => {
+    adminFoodTableBody.innerHTML = visibleFoods.map(food => {
         const id = Number(food.id);
         const availabilityClass = food.availability
             ? "status-ready"
@@ -426,10 +660,9 @@ function renderAdminFoods() {
         return `
             <tr>
                 <td>${id}</td>
-                <td><strong>${escapeHtml(food.name)}</strong></td>
+                <td><div class="admin-food-name-cell"><img class="admin-food-thumb" data-food-photo src="${foodPhoto(food)}" alt="" loading="lazy"><strong>${escapeHtml(food.name)}</strong></div></td>
                 <td>${escapeHtml(food.category)}</td>
                 <td>₹${money(food.price)}</td>
-                <td>★ ${money(food.rating)}</td>
                 <td>
                     <span class="status-pill ${availabilityClass}">${availabilityText}</span>
                 </td>
@@ -445,18 +678,24 @@ function renderAdminFoods() {
                 </td>
             </tr>`;
     }).join("");
+    bindImageFallbacks(adminFoodTableBody);
 }
 
 async function loadAdminFoods() {
     adminFoodTableBody.innerHTML =
-        '<tr><td colspan="7" class="empty-cell">Loading menu…</td></tr>';
+        '<tr><td colspan="6" class="empty-cell">Loading menu…</td></tr>';
     try {
         const response = await fetch(ADMIN_FOODS_URL);
         adminFoods = await readJsonResponse(response);
+        if (!Array.isArray(adminFoods)) {
+            throw new Error("The admin foods API returned an invalid response.");
+        }
+        adminFoodsLoaded = true;
         renderAdminFoods();
+        updateDashboardStats();
     } catch (error) {
         adminFoodTableBody.innerHTML =
-            '<tr><td colspan="7" class="empty-cell">Could not load admin menu.</td></tr>';
+            '<tr><td colspan="6" class="empty-cell">Could not load admin menu.</td></tr>';
         setAdminMessage(
             `${error.message}. Check backend and run the SQL migration.`,
             true
@@ -573,4 +812,5 @@ document.getElementById("refresh-admin-menu-btn").addEventListener(
     "click",
     loadAdminFoods
 );
-loadAdminFoods();
+adminFoodSearch.addEventListener("input", renderAdminFoods);
+adminFoodAvailability.addEventListener("change", renderAdminFoods);
